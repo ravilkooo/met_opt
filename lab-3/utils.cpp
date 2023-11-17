@@ -2,7 +2,6 @@
 #include <vector>
 #include <string>
 
-
 std::pair<int, std::vector<long double>> simplex_maximize(
     const Matrix& A, const Matrix& B,
     const std::vector<long double>& c) {
@@ -16,7 +15,7 @@ std::pair<int, std::vector<long double>> simplex_maximize(
     for (int i = 0; i < m; i++) {
         E[i][i] = 1;
     }
-    auto A_can = concat(A, E);
+    auto A_can = concat(E, A);
     
     // step 1
     // Расчёт каноничной формы (E|A'|B')
@@ -24,19 +23,20 @@ std::pair<int, std::vector<long double>> simplex_maximize(
     canone(A_can, B_can);
     std::vector<long double> c_ext(n_1, 0.);
     for (int i = 0; i < c.size(); i++) {
-        c_ext[i] = c[i];
+        c_ext[m+i] = c[i];
     }
 
     // step 2
     // запоминаем какой переменной соответсвует каждый столбец
     std::vector<int> order(n_1);
     for (int i = 0; i < n_1; i++) {
-        order[i] = i;
+        order[(n + i) % n_1] = i;
     }
     std::vector<long double> x(n_1, 0.0);
     for (int i = 0; i < B_can.rows(); i++) {
         x[order[i]] = B_can[i][0];
     }
+    std::vector<long double> z;
 
     int result = NOT_YET;
     int max_iterations = 20;
@@ -45,7 +45,8 @@ std::pair<int, std::vector<long double>> simplex_maximize(
         std::cout << "#" << iter << std::endl;
         // step 3
         // считаем данные в симплекс-таблице
-        std::vector<long double> z(n_1, 0.);
+        z.clear();
+        z.resize(n_1, 0.);
         std::vector<long double> Delta(n_1, 0.);
         std::vector<long double> t(m, 0.);
         calc_table(A_can, c_ext, z, Delta);
@@ -57,6 +58,9 @@ std::pair<int, std::vector<long double>> simplex_maximize(
         print_table(A_can, B_can, c_ext, z, Delta, t, order);
 
         if (result != NOT_YET) {
+            for (int i = m; i < n_1; i++) {
+                x[i] = z[order[i]];
+            }
             return std::pair<int, std::vector<long double>>(result, x);
         }
         //std::cout << "A:" << A_can;
@@ -81,6 +85,9 @@ std::pair<int, std::vector<long double>> simplex_maximize(
         }
     }
     std::cout << "ITERATION LIMIT!" << std::endl;
+    for (int i = m; i < n_1; i++) {
+        x[i] = z[order[i]];
+    }
     return std::pair<int, std::vector<long double>>(ITER_LIMIT, x);
 }
 
@@ -156,7 +163,7 @@ int analyze(const Matrix& A, const Matrix& B, const std::vector<long double>& x,
             continue;
         }
         t[i] = B[i][0] / A[i][solve_col_idx];
-        if (solve_row_idx < 0 || t[i] < t[solve_row_idx]) {
+        if (solve_row_idx < 0 || (t[i] < t[solve_row_idx] && t[i] > 0)) {
             solve_row_idx = i;
         }
     }
@@ -189,7 +196,8 @@ void print_table(const Matrix& A, const Matrix& B, const std::vector<long double
             std::cout << std::setw(9) << std::setprecision(4) << A[i][j];
         }
         std::cout << std::setw(9) << std::setprecision(4) << std::left
-            << (t[i] > 0 ? std::to_string(t[i]) : "") << std::endl;
+            //<< (t[i] > 0 ? std::to_string(t[i]) : "") << std::endl;
+            << t[i] << std::endl;
     }
     std::cout << std::setw(5) << "z" << std::setw(9) << "" << std::setw(9) << "?";
     for (int i = 0; i < z.size(); i++) {

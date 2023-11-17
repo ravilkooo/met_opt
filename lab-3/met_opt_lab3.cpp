@@ -6,35 +6,36 @@ void solve(Matrix A, Matrix B, std::vector<long double> c);
 int main() {
     // рандомные числа
     {
-        Matrix A(3, 3);
+        /*Matrix A(3, 3);
         Matrix B(3, 1);
+        std::vector<long double> c(3, 1);
         for (std::size_t i = 0; i < A.rows(); ++i) {
             for (std::size_t j = 0; j < A.cols(); ++j) {
                 A[i][j] = (i * A.cols() + j + 1) * (i * A.cols() + j + 1);
             }
             B[i][0] = (1 + i) * (2 + i) + i - 1;
         }
-        std::vector<long double> c(3, 1);
 
-        solve(A, B, c);
+        solve(A, B, c);*/
     }
     // моё задание
     {
         Matrix A(4, 4);
         Matrix B(4, 1);
+        std::vector<long double> c(4);
         A[0][0] = 0.2; A[0][1] = 1./6.;
-        A[1][2] = 1./30.;
+        A[1][2] = 1./0.3;
         A[2][3] = 4.;
         A[3][0] = 1. / 1.01; A[3][1] = 1. / 1.01; A[3][2] = 1. / 9.45; A[3][3] = 1. / 16.;
         B[0][0] = 21.;
         B[1][0] = 16.;
         B[2][0] = 17.;
         B[3][0] = 140.;
-        std::vector<long double> c(4);
         c[0] = 2.4; c[1] = 2.7; c[2] = 13.8; c[3] = 7.5;
 
         solve(A, B, c);
     }
+
     return 0;
 }
 
@@ -60,9 +61,10 @@ void solve(Matrix A, Matrix B, std::vector<long double> c) {
                 std::cout << "x_" << i + 1 << " = " << std::setprecision(5) << x_ans[i] << std::endl;
                 _s += x_ans[i] * c[i];
             }
-            for (int i = c.size(); i < x_ans.size(); i++) {
-                std::cout << "x_" << i + 1 << " = " << std::setprecision(5) << x_ans[i] << std::endl;
-            }
+            //std::cout << "Solution to dual task" << std::endl;
+            //for (int i = c.size(); i < x_ans.size(); i++) {
+                //std::cout << "z_" << i - c.size() << " = " << std::setprecision(5) << x_ans[i] << std::endl;
+            //}
             std::cout << "Max <c,x> = " << std::setprecision(5) << _s << std::endl;
         }
         break;
