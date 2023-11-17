@@ -1,12 +1,17 @@
 #include "utils.h"
 #include <vector>
+#include <string>
 
-Matrix simplex_maximize(Matrix A, Matrix B, std::vector<long double> c) {
+
+std::pair<int, std::vector<long double>> simplex_maximize(
+    const Matrix& A, const Matrix& B,
+    const std::vector<long double>& c) {
     // step 0
     int n = A.cols();
     int m = A.rows();
-    int n_1 = A.cols();
+    int n_1 = n + m;
 
+    // —оздаЄм доп переменные, чтобы перейти от общей к канон форме
     Matrix E = Matrix(m, m);
     for (int i = 0; i < m; i++) {
         E[i][i] = 1;
@@ -14,34 +19,203 @@ Matrix simplex_maximize(Matrix A, Matrix B, std::vector<long double> c) {
     auto A_can = concat(A, E);
     
     // step 1
+    // –асчЄт каноничной формы (E|A'|B')
     auto B_can = B;
-    auto A_full = canone(A_can, B_can);
+    canone(A_can, B_can);
+    std::vector<long double> c_ext(n_1, 0.);
+    for (int i = 0; i < c.size(); i++) {
+        c_ext[i] = c[i];
+    }
 
     // step 2
-    auto x_init = B_can;
+    // запоминаем какой переменной соответсвует каждый столбец
+    std::vector<int> order(n_1);
+    for (int i = 0; i < n_1; i++) {
+        order[i] = i;
+    }
+    std::vector<long double> x(n_1, 0.0);
+    for (int i = 0; i < B_can.rows(); i++) {
+        x[order[i]] = B_can[i][0];
+    }
 
-    // step 3
-    std::vector<long double> z(n_1, 0.);
-    std::vector<long double> Delta(n-1, 0.);
-    calc_table(A_can, c, z, Delta);
+    int result = NOT_YET;
+    int max_iterations = 20;
 
-    // step 4
-    // analyze()
+    for (int iter = 0; iter < max_iterations; iter++) {
+        std::cout << "#" << iter << std::endl;
+        // step 3
+        // считаем данные в симплекс-таблице
+        std::vector<long double> z(n_1, 0.);
+        std::vector<long double> Delta(n_1, 0.);
+        std::vector<long double> t(m, 0.);
+        calc_table(A_can, c_ext, z, Delta);
 
-    // step 5
-    // update_ab()
+        // step 4
+        // провер€ем получено ли решение
+        int solve_row_idx, solve_col_idx;
+        result = analyze(A_can, B_can, x, c_ext, z, Delta, t, solve_row_idx, solve_col_idx);
+        print_table(A_can, B_can, c_ext, z, Delta, t, order);
+
+        if (result != NOT_YET) {
+            return std::pair<int, std::vector<long double>>(result, x);
+        }
+        //std::cout << "A:" << A_can;
+        //std::cout << "B:" << B_can;
+
+        // step 5
+        // переходим к новому базису, обновл€ем таблицу, приводим к канон виду
+        swap_cols(A_can, c_ext, solve_row_idx, solve_col_idx);
+        canone(A_can, B_can);
+        // запоминаем какой переменной соответсвует каждый столбец
+        int _t = order[solve_col_idx];
+        order[solve_col_idx] = order[solve_row_idx];
+        order[solve_row_idx] = _t;
+
+
+        // пересчитываем x (с учетом смены столбцов)
+        x.clear();
+        x.resize(n_1, 0.0);
+        // небазисные занул€ютс€, остальные равны правой части B
+        for (int i = 0; i < B_can.rows(); i++) {
+            x[order[i]] = B_can[i][0];
+        }
+    }
+    std::cout << "ITERATION LIMIT!" << std::endl;
+    return std::pair<int, std::vector<long double>>(ITER_LIMIT, x);
 }
 
-void calc_table(Matrix A, std::vector<long double> c, std::vector<long double>& z, std::vector<long double>& Delta) {
+// Ќе понадобилось, т.к. € по своему храню пор€док базисных и небаз переменных.
+// я заменил эту функцию -> swap_cols() + canone()
+void update_ab(Matrix& A, Matrix& B, int solve_row_idx, int solve_col_idx) {
+    auto A_1 = A;
+    auto B_1 = B;
+
+    for (int i = 0; i < A.rows(); i++) {
+        if (i == solve_row_idx)
+            continue;
+        B_1[i][0] = B[i][0] - B[solve_row_idx][0] * A[i][solve_col_idx] / A[solve_row_idx][solve_col_idx];
+        for (int j = 0; j < A.cols(); j++) {
+            A_1[i][j] = A[i][j] - A[solve_row_idx][j] * A[i][solve_col_idx] / A[solve_row_idx][solve_col_idx];
+        }
+    }
+
+    A_1[solve_row_idx][solve_col_idx] = 1;
+    for (int i = 0; i < A.rows(); i++) {
+        if (i == solve_row_idx)
+            continue;
+        A_1[i][solve_col_idx] = 0;
+    }
+
+    B_1[solve_row_idx][0] = B[solve_row_idx][0] / A[solve_row_idx][solve_col_idx];
+    for (int j = 0; j < A.cols(); j++) {
+        A_1[solve_row_idx][j] = A[solve_row_idx][j] / A[solve_row_idx][solve_col_idx];
+    }
+    A = A_1;
+    B = B_1;
+    //std::cout << "A_1:" << A_1;
+    //std::cout << "B_1:" << B_1;
+}
+
+void swap_cols(Matrix& A, std::vector<long double>& c, int p, int q)  {
+    long double _t = c[p];
+    c[p] = c[q];
+    c[q] = _t;
+
+    for (int i = 0; i < A.rows(); i++) {
+        _t = A[i][p];
+        A[i][p] = A[i][q];
+        A[i][q] = _t;
+    }
+}
+
+int analyze(const Matrix& A, const Matrix& B, const std::vector<long double>& x,
+    const std::vector<long double>& c, const std::vector<long double>& z,
+    const std::vector<long double>& Delta, std::vector<long double>& t,
+    int& solve_row_idx, int& solve_col_idx) {
+    bool all_pos = true;
+    solve_col_idx = 0;
+    for (int i = 0; i < Delta.size(); i++) {
+        if (Delta[i] >= 0) {
+            continue;
+        }
+        all_pos = false;
+        if (x[i] < 0) {
+            return INFINITE_SOL;
+        }
+        if (Delta[i] < Delta[solve_col_idx]) {
+            solve_col_idx = i;
+        }
+    }
+    if (all_pos) {
+        return FINITE_SOL;
+    }
+    solve_row_idx = -1;
+    for (int i = 0; i < t.size(); i++) {
+        if (A[i][solve_col_idx] <= 0) {
+            t[i] = -1;
+            continue;
+        }
+        t[i] = B[i][0] / A[i][solve_col_idx];
+        if (solve_row_idx < 0 || t[i] < t[solve_row_idx]) {
+            solve_row_idx = i;
+        }
+    }
+    //std::cout << solve_row_idx << "," << solve_col_idx << ":" << A[solve_row_idx][solve_col_idx] << std::endl;
+
+    return NOT_YET;
+}
+
+void print_table(const Matrix& A, const Matrix& B, const std::vector<long double>& c,
+    const std::vector<long double>& z, const std::vector<long double>& Delta,
+    const std::vector<long double>& t, const std::vector<int>& order) {
+    // использую дл€ красоты: << std::setw(10) << std::setprecision(4)
+    std::cout << std::setfill('-') << std::setw(c.size()*9+32) << "" << std::endl << std::setfill(' ');
+    std::cout << std::setw(5) << "" << std::setw(9) << std::left << "c" << std::setw(9) << "";
+    for (int i = 0; i < c.size(); i++) {
+        std::cout << std::setw(9) << std::setprecision(4) << c[i];
+    }
+    std::cout << std::setw(9) << std::left << "t" << std::endl;
+    std::cout << std::endl;
+    std::cout << std::setw(5) << "basis" << std::setw(9) << "" << std::setw(9) << std::left << "b";
     for (int i = 0; i < A.cols(); i++) {
+        std::cout << "a^" << std::setw(7) << std::left << order[i] + 1;
+    }
+    std::cout << std::endl;
+    for (int i = 0; i < A.rows(); i++) {
+        std::cout << "a_" << std::setw(3) << std::left << order[i] + 1
+            << std::setw(9) << std::setprecision(4) << c[i]
+            << std::setw(9) << std::setprecision(4) << B[i][0];
+        for (int j = 0; j < A.cols(); j++) {
+            std::cout << std::setw(9) << std::setprecision(4) << A[i][j];
+        }
+        std::cout << std::setw(9) << std::setprecision(4) << std::left
+            << (t[i] > 0 ? std::to_string(t[i]) : "") << std::endl;
+    }
+    std::cout << std::setw(5) << "z" << std::setw(9) << "" << std::setw(9) << "?";
+    for (int i = 0; i < z.size(); i++) {
+        std::cout << std::setw(9) << std::setprecision(4) << z[i];
+    }
+    std::cout << std::endl;
+    std::cout << std::setw(5) << "Delta" << std::setw(9) << "" << std::setw(9) << "";
+    for (int i = 0; i < Delta.size(); i++) {
+        std::cout << std::setw(9) << std::setprecision(4) << Delta[i];
+    }
+    std::cout << std::endl;
+    std::cout << std::setfill('-') << std::setw(c.size() * 9 + 32) << "" << std::endl << std::setfill(' ');
+}
+
+void calc_table(const Matrix& A, const std::vector<long double>& c,
+    std::vector<long double>& z, std::vector<long double>& Delta) {
+    for (int i = 0; i < A.cols(); i++) {
+        z[i] = 0;
         for (int j = 0; j < A.rows(); j++) {
-            z[i] += c[j] * A[i][j];
+            z[i] += c[j] * A[j][i];
         }
         Delta[i] = z[i] - c[i];
     }
 }
 
-Matrix concat(Matrix A, Matrix B) {
+Matrix concat(const Matrix& A, const Matrix& B) {
     Matrix C = Matrix(A.rows(), A.cols() + B.cols());
     for (int i = 0; i < A.rows(); i++) {
         for (int j = 0; j < A.cols(); j++) {
