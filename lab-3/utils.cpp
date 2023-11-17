@@ -58,8 +58,11 @@ std::pair<int, std::vector<long double>> simplex_maximize(
         print_table(A_can, B_can, c_ext, z, Delta, t, order);
 
         if (result != NOT_YET) {
-            for (int i = m; i < n_1; i++) {
-                x[i] = z[order[i]];
+            // сохраняем решение к двойственной задаче.
+            // они лежат в z_i, соответсвующих небазисным переменным x_i
+            for (int i = 0; i < order.size(); i++) {
+                if (order[i] >= n)
+                    x[order[i]] = z[i];
             }
             return std::pair<int, std::vector<long double>>(result, x);
         }
@@ -85,8 +88,9 @@ std::pair<int, std::vector<long double>> simplex_maximize(
         }
     }
     std::cout << "ITERATION LIMIT!" << std::endl;
-    for (int i = m; i < n_1; i++) {
-        x[i] = z[order[i]];
+    for (int i = 0; i < order.size(); i++) {
+        if (order[i] >= n)
+            x[order[i]] = z[i];
     }
     return std::pair<int, std::vector<long double>>(ITER_LIMIT, x);
 }

@@ -55,16 +55,16 @@ void solve(Matrix A, Matrix B, std::vector<long double> c) {
         break;
         case FINITE_SOL:
         {
-            std::cout << "Finite solution" << std::endl;
+            std::cout << "Finite solution to task:" << std::endl;
             long double _s = 0;
             for (int i = 0; i < c.size(); i++) {
                 std::cout << "x_" << i + 1 << " = " << std::setprecision(5) << x_ans[i] << std::endl;
                 _s += x_ans[i] * c[i];
             }
-            //std::cout << "Solution to dual task" << std::endl;
-            //for (int i = c.size(); i < x_ans.size(); i++) {
-                //std::cout << "z_" << i - c.size() << " = " << std::setprecision(5) << x_ans[i] << std::endl;
-            //}
+            std::cout << "Solution to dual task:" << std::endl;
+            for (int i = c.size(); i < x_ans.size(); i++) {
+                std::cout << "y_" << i - c.size() << " = " << std::setprecision(5) << x_ans[i] << std::endl;
+            }
             std::cout << "Max <c,x> = " << std::setprecision(5) << _s << std::endl;
         }
         break;
