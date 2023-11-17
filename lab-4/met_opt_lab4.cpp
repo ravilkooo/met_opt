@@ -61,8 +61,7 @@ int main() {
 void solve(Matrix A, Matrix B, std::vector<long double> c) {
     std::cout << "A:\n" << A;
     std::cout << "B:\n" << B;
-    auto ss = simplex_init(A, B, c);
-    ss = simplex_step(ss);
+    auto ss = gomori_solve(A, B, c);
     auto sol_type = ss.result;
     auto x_ans = ss.x_curr;
 
