@@ -87,7 +87,7 @@ std::pair<int, std::vector<long double>> simplex_maximize(
             x[order[i]] = B_can[i][0];
         }
     }
-    std::cout << "ITERATION LIMIT!" << std::endl;
+    //std::cout << "ITERATION LIMIT!" << std::endl;
     for (int i = 0; i < order.size(); i++) {
         if (order[i] >= n)
             x[order[i]] = z[i];
