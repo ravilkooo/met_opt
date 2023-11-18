@@ -5,21 +5,148 @@
 SystemState gomori_solve(const Matrix& A, const Matrix& B,
     const std::vector<long double>& c) {
     SystemState ss = simplex_init(A, B, c);
-    ss = simplex_step(ss);
-    long double tolerance = 1e-5;
-    bool is_int = true;
-    for (int i = 0; is_int && i < c.size(); i++) {
-        long double err = abs(ss.x_curr[i] - round(ss.x_curr[i]));
-        is_int = err < tolerance;
+    int max_iterations = 100;
+    int iter = 0;
+    while (true) {
+        //std::cout << "#" << iter << std::endl;
+        std::cout << "#" << std::left << std::setfill('#') << std::setw(c.size() * 9 + 32) << " " + std::to_string(iter) + " " << std::endl << std::setfill(' ');
+        ss = simplex_step(ss);
+
+        std::cout << "Current solution:" << std::endl;
+        for (int i = 0; i < ss.opt_vars; i++) {
+            long double err = abs(ss.x_curr[i] - round(ss.x_curr[i]));
+            std::cout << ss.x_curr[i];
+            std::cout << "(" << err << ");";
+        }
+        std::cout << std::endl << std::endl;
+
+        if (ss.result != FINITE_SOL) {
+            return ss;
+        }
+        long double tolerance = 1e-5;
+        bool is_int = true;
+        for (int i = 0; is_int && i < ss.opt_vars; i++) {
+            long double err = abs(ss.x_curr[i] - round(ss.x_curr[i]));
+            is_int = err < tolerance;
+        }
+        if (is_int)
+            return ss;
+        if (++iter >= max_iterations) {
+            //std::cout << "ITERATION LIMIT!" << std::endl;
+            ss.result = ITER_LIMIT;
+            return ss;
+        }
+
+        int m_prev = ss.A.rows();
+        int n_1_prev = ss.A.cols();
+        int n_prev = n_1_prev - m_prev;
+        // std::cout << "tut1" << std::endl;
+
+        // добавл€ем переменную и ограничение
+        ss = push_variable(ss);
+
+        // считаем дельта, чтобы выбрать новый базисный вектор
+        int n_1_curr = ss.A.cols();
+        std::vector<long double> z(n_1_curr, 0.);
+        std::vector<long double> Delta(n_1_curr, 0.);
+        calc_table(ss.A, ss.c_ext, z, Delta);
+
+        // std::cout << "tut3" << std::endl;
+        int new_bas_idx = -1;
+        //print_table(ss.A, ss.B, ss.c_ext, z, Delta, z, ss.order);
+
+        for (int i = m_prev; i < n_1_prev; i++) {
+            //std::cout << Delta[i] << " ";
+            if (Delta[i] <= 0)
+                continue;
+
+            if (new_bas_idx < 0 || Delta[i] < Delta[new_bas_idx]) {
+                new_bas_idx = i;
+            }
+        }
+        //std::cout << std::endl;
+
+        // std::cout << "tut4" << std::endl;
+        // assert new_bas_idx >= m_prev
+        auto A_can = ss.A;
+        auto B_can = ss.B;
+        auto c_ext = ss.c_ext;
+        auto order = ss.order;
+        // сдвигаем базисный вектор к остальным базисным
+        swap_cols(A_can, c_ext, new_bas_idx, m_prev);
+        // запоминаем какой переменной соответсвует каждый столбец
+        int _t = order[new_bas_idx];
+        order[new_bas_idx] = order[m_prev];
+        order[m_prev] = _t;
+
+
+        // std::cout << "tut5" << std::endl;
+        canone(A_can, B_can);
+
+        // std::cout << "tut6" << std::endl;
+        ss.A = A_can; ss.B = B_can; ss.order = order; ss.c_ext = c_ext;
     }
-    if (is_int)
-        return ss;
-    else {
-        std::cout << "C'est La Vie :)" << std::endl;
-        return ss;
+}
+
+SystemState push_variable(
+    SystemState ss) {
+
+    int m_curr = ss.A.rows();
+    int n_1_curr = ss.A.cols();
+    int n_curr = n_1_curr - m_curr;
+
+    auto x_curr = ss.x_curr;
+
+    // finding indmax{x_i}
+    int max_fract_idx = -1;
+    for (int i = 0; i < m_curr; i++) {
+        //std::cout << (x_curr[i] - floor(x_curr[i])) << ";;";
+        if (ss.order[i] >= ss.opt_vars) {
+            continue;
+        }
+        if (max_fract_idx < 0 || (x_curr[ss.order[i]] - floor(x_curr[ss.order[i]]))
+        > (x_curr[ss.order[max_fract_idx]] - floor(x_curr[ss.order[max_fract_idx]]))) {
+            max_fract_idx = i;
+        }
     }
-        
-        
+
+    //std::cout << max_fract_idx << "=>" << ss.order[max_fract_idx] << std::endl;
+    //std::cout << x_curr[ss.order[max_fract_idx]] - floor(x_curr[ss.order[max_fract_idx]]) << std::endl;
+    Matrix A = Matrix(m_curr + 1, n_1_curr + 1);
+    Matrix B = Matrix(m_curr + 1, 1);
+
+    for (int i = 0; i < m_curr; i++) {
+        for (int j = 0; j < n_1_curr; j++) {
+            A[i][j] = ss.A[i][j];
+        }
+        A[i][n_1_curr] = 0;
+        B[i][0] = ss.B[i][0];
+    }
+    B[m_curr][0] = x_curr[ss.order[max_fract_idx]] - floor(x_curr[ss.order[max_fract_idx]]);
+    
+    for (int j = 0; j < m_curr; j++) {
+        A[m_curr][j] = 0;
+    }
+
+    // std::cout << "tut612" << std::endl;
+    for (int j = m_curr; j < n_1_curr; j++) {
+        A[m_curr][j] = (ss.A[max_fract_idx][j] - floor(ss.A[max_fract_idx][j]));
+    }
+    A[m_curr][n_1_curr] = -1;
+
+    // std::cout << "tut613" << std::endl;
+    std::vector<int> order(ss.order.size() + 1, ss.order.size());
+    for (int i = 0; i < ss.order.size(); i++) {
+        order[i] = ss.order[i];
+    }
+
+    // std::cout << "tut614" << std::endl;
+    std::vector<long double> c_ext(ss.c_ext.size() + 1, 0);
+    for (int i = 0; i < ss.c_ext.size(); i++) {
+        c_ext[i] = ss.c_ext[i];
+    }
+
+    return SystemState(NOT_YET, order, A, B, c_ext, ss.opt_vars);
 }
 
 SystemState simplex_init(
@@ -52,7 +179,7 @@ SystemState simplex_init(
     for (int i = 0; i < n_1; i++) {
         order[(n + i) % n_1] = i;
     }
-    return SystemState(NOT_YET, order, A_can, B_can, c_ext);
+    return SystemState(NOT_YET, order, A_can, B_can, c_ext, c.size());
 }
 
 SystemState simplex_step(SystemState ss) {
@@ -75,7 +202,7 @@ SystemState simplex_step(SystemState ss) {
     int max_iterations = 20;
 
     for (int iter = 0; iter < max_iterations; iter++) {
-        std::cout << "#" << iter << std::endl;
+        std::cout << "##" << iter << std::endl;
         // step 3
         // считаем данные в симплекс-таблице
         z.clear();
@@ -88,16 +215,16 @@ SystemState simplex_step(SystemState ss) {
         // провер€ем получено ли решение
         int solve_row_idx, solve_col_idx;
         result = analyze(A_can, B_can, x, c_ext, z, Delta, t, solve_row_idx, solve_col_idx);
-        print_table(A_can, B_can, c_ext, z, Delta, t, order);
+        //print_table(A_can, B_can, c_ext, z, Delta, t, order);
 
         if (result != NOT_YET) {
             // сохран€ем решение к двойственной задаче.
             // они лежат в z_i, соответсвующих небазисным переменным x_i
-            for (int i = 0; i < order.size(); i++) {
+            /*for (int i = 0; i < order.size(); i++) {
                 if (order[i] >= n)
                     x[order[i]] = z[i];
-            }
-            return SystemState(result, order, A_can, B_can, c_ext, x);
+            }*/
+            return SystemState(result, order, A_can, B_can, c_ext, ss.opt_vars, x);
         }
         //std::cout << "A:" << A_can;
         //std::cout << "B:" << B_can;
@@ -120,8 +247,8 @@ SystemState simplex_step(SystemState ss) {
             x[order[i]] = B_can[i][0];
         }
     }
-    std::cout << "ITERATION LIMIT!" << std::endl;
-    return SystemState(result, order, A_can, B_can, c_ext, x);
+    //std::cout << "ITERATION LIMIT!" << std::endl;
+    return SystemState(ITER_LIMIT, order, A_can, B_can, c_ext, ss.opt_vars, x);
 }
 
 // Ќе понадобилось, т.к. € по своему храню пор€док базисных и небаз переменных.
@@ -281,7 +408,7 @@ Matrix canone(Matrix& A, Matrix& B)
     //ѕр€мой ход («ануление нижнего левого угла)
     for (int k = 0; k < m; k++) //k-номер строки
     {
-        //std::cout << "тут0" << std::endl;
+        // std::cout << "tut0" << std::endl;
         int not_zero_row = k;
         //while (not_zero_row < m and A_new[not_zero_row][k] == 0.) {
         while (A_new[not_zero_row][k] == 0.) {
@@ -289,7 +416,7 @@ Matrix canone(Matrix& A, Matrix& B)
         }
         //assert not_zero_row < m
         //swap k_row and not_zero_row
-        //std::cout << "тут1" << std::endl;
+        // std::cout << "tut1" << std::endl;
         if (k < not_zero_row) {
             auto _t = A_new[k];
             A_new[k] = A_new[not_zero_row];
@@ -301,11 +428,11 @@ Matrix canone(Matrix& A, Matrix& B)
             A[not_zero_row] = _t;
         }
 
-        //std::cout << "тут2" << std::endl;
+        // std::cout << "tut2" << std::endl;
         for (int i = 0; i < n + 1; i++) //i-номер столбца
             A_new[k][i] = A_new[k][i] / A[k][k]; //ƒеление k-строки на первый член !=0 дл€ преобразовани€ его в единицу
 
-        //std::cout << "тут3" << std::endl;
+        // std::cout << "tut3" << std::endl;
         for (int i = k + 1; i < m; i++) //i-номер следующей строки после k
         {
             double K = A_new[i][k] / A_new[k][k]; // оэффициент
@@ -313,7 +440,7 @@ Matrix canone(Matrix& A, Matrix& B)
                 A_new[i][j] = A_new[i][j] - A_new[k][j] * K; //«ануление элементов матрицы ниже первого члена, преобразованного в единицу
         }
 
-        //std::cout << "тут4" << std::endl;
+        // std::cout << "tut4" << std::endl;
         for (int i = 0; i < m; i++) //ќбновление, внесение изменений в начальную матрицу
         {
             for (int j = 0; j < n; j++) {

@@ -14,16 +14,20 @@ public:
 	std::vector<long double> c_ext;
 	std::vector<int> order;
 	std::vector<long double> x_curr;
-	SystemState(int result, std::vector<int> order,
-		Matrix A, Matrix B,
-		std::vector<long double> c_ext) :
-		result(result), order(order), A(A), B(B), c_ext(c_ext) {
+	int opt_vars;
+	SystemState(int result, std::vector<int> order, Matrix A, Matrix B,
+		std::vector<long double> c_ext, int opt_vars) :
+		result(result), order(order),
+		A(A), B(B), c_ext(c_ext),
+		opt_vars(opt_vars) {
 	}
 	SystemState(int result, std::vector<int> order,
 		Matrix A, Matrix B,
-		std::vector<long double> c_ext,
-		std::vector<long double> x_curr) :
-		result(result), order(order), A(A), B(B), c_ext(c_ext), x_curr(x_curr) {
+		std::vector<long double> c_ext, int opt_vars,
+		std::vector<long double> x_curr):
+		result(result), order(order),
+		A(A), B(B), c_ext(c_ext),
+		opt_vars(opt_vars), x_curr(x_curr) {
 	}
 	std::vector<long double> calc_x() {
 
@@ -31,6 +35,7 @@ public:
 };
 SystemState gomori_solve(const Matrix& A, const Matrix& B,
 	const std::vector<long double>& c);
+SystemState push_variable(SystemState ss);
 void swap_cols(Matrix& A, std::vector<long double>& c, int p, int q);
 void update_ab(Matrix& A, Matrix& B, int solve_row_idx, int solve_col_idx);
 int analyze(const Matrix& A, const Matrix& B, const std::vector<long double>& x,
